@@ -1,0 +1,4 @@
+define KFEATURE_DESCRIPTION "Oasis VM enablement"
+
+kconf hardware oasisvm.cfg
+

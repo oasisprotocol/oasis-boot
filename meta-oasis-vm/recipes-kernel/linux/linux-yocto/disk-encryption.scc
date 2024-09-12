@@ -1,0 +1,4 @@
+define KFEATURE_DESCRIPTION "Disk encryption enablement"
+
+kconf hardware disk-encryption.cfg
+

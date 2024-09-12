@@ -1,0 +1,4 @@
+define KFEATURE_DESCRIPTION "Enabling security mitigations against CPU Vulnerabilities"
+
+kconf hardware security-mitigations.cfg
+

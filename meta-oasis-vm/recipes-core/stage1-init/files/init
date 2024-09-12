@@ -1,0 +1,50 @@
+#!/bin/sh
+
+# Abort on failure.
+set -e
+
+# Mount virtual filesystems.
+mkdir -p /proc /sys /dev
+mount none -t proc /proc
+mount none -t sysfs /sys
+mount none -t devtmpfs /dev
+mkdir -p /dev/pts
+mount none -t devpts /dev/pts
+
+# Parse kernel commandline to extract the necessary metadata. We are using the kernel commandline
+# as that is measured during boot and reflected in RTMR2. So a different configuration will result
+# in a different TD identity.
+stage2_root_hash=""
+stage2_hash_offset=""
+for cfg in $(cat /proc/cmdline | xargs -n1); do
+	case $cfg in
+		oasis.stage2.roothash=*)
+			# Stage 2 root hash.
+			stage2_root_hash="${cfg//oasis.stage2.roothash=}"
+		;;
+		oasis.stage2.hash_offset=*)
+			# Stage 2 hash offset.
+			stage2_hash_offset="${cfg//oasis.stage2.hash_offset=}"
+		;;
+	esac
+done
+
+# Ensure configuration is correct.
+if [[ -z "${stage2_root_hash}" || -z "${stage2_hash_offset}" ]]; then
+	echo "Missing stage 2 configuration."
+	exit 1
+fi
+
+# Set up dm-verity for the stage 2 root filesystem on /dev/vda.
+veritysetup open \
+	--hash-offset=${stage2_hash_offset} \
+	--panic-on-corruption \
+	/dev/vda \
+	stage2 \
+	/dev/vda \
+	${stage2_root_hash}
+
+# Mount stage 2 root filesystem and switch into it.
+mkdir -p /stage2
+mount /dev/mapper/stage2 /stage2
+exec switch_root /stage2 /init
