@@ -28,15 +28,25 @@ build-outer: prepare
 build-inner:
 	@source poky/oe-init-build-env build/ && \
 		bitbake oasis-vm-stage1 && \
-		bitbake oasis-vm-stage2-basic
+		bitbake oasis-vm-stage2-basic && \
+		bitbake ovmf
 
 # Cleanup.
 clean:
 	@rm -rf build/tmp
+
+# Enter build environment.
+shell:
+	@$(DOCKER) run --rm -it \
+		-v $(shell pwd):/workdir \
+		-w /workdir \
+		$(BUILD_IMAGE) \
+		bash
 
 # List of targets that are not actual files.
 .PHONY: \
 	all \
 	build-outer \
 	build-inner \
-	clean
+	clean \
+	shell

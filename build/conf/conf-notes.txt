@@ -6,6 +6,7 @@ You can now run 'bitbake <target>'
 Common targets are:
     oasis-vm-stage1
     oasis-vm-stage2-basic
+    ovmf
 
 Other commonly useful commands are:
  - 'devtool' and 'recipetool' handle common recipe tasks
