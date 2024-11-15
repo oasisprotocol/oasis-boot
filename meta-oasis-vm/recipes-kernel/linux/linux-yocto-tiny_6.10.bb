@@ -23,7 +23,13 @@ SRCREV_meta ?= "9e63c08171dc88ed8a5ed8ecc4b508465ea75352"
 PV = "${LINUX_VERSION}+git"
 
 SRC_URI = "git://git.yoctoproject.org/linux-yocto.git;branch=${KBRANCH};name=machine;protocol=https \
-           git://git.yoctoproject.org/yocto-kernel-cache;type=kmeta;name=meta;branch=yocto-6.10;destsuffix=${KMETA};protocol=https"
+           git://git.yoctoproject.org/yocto-kernel-cache;type=kmeta;name=meta;branch=yocto-6.10;destsuffix=${KMETA};protocol=https \
+           file://0001-tsm-Runtime-measurement-register-support.patch \
+           file://0002-tsm-Add-RTMRs-to-the-configfs-tsm-hierarchy.patch \
+           file://0003-tsm-Map-RTMRs-to-TCG-TPM-PCRs.patch \
+           file://0004-tsm-Allow-for-extending-and-reading-configured-RTMRs.patch \
+           file://0005-x86-tdx-Add-tdx_mcall_rtmr_extend-interface.patch \
+           file://0006-virt-tdx-guest-Add-RTMR-based-measurement-update-sup.patch"
 
 COMPATIBLE_MACHINE = "^(qemux86|qemux86-64|qemuarm64|qemuarm|qemuarmv5)$"
 

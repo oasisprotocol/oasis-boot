@@ -1,0 +1,139 @@
+From ed52807e9180021406f8aef25f9b830539330733 Mon Sep 17 00:00:00 2001
+From: Samuel Ortiz <sameo@rivosinc.com>
+Date: Sun, 28 Jan 2024 22:25:23 +0100
+Subject: [PATCH 4/6] tsm: Allow for extending and reading configured RTMRs
+
+The whole purpose of TSM supported RTMRs is for userspace to extend them
+with runtime measurements and to read them back.
+
+This can be done through a binary configfs attribute for each RTMR:
+
+rtmr0=/sys/kernel/config/tsm/rtmrs/rtmr0
+mkdir $rtmr0
+echo 0 > $rtmr0/index
+dd if=software_layer_digest > $rtmr0/digest
+hexdump $rtmr0/digest
+
+An RTMR digest can not be extended or read before the RTMR is configured
+by assigning it an index.
+
+Signed-off-by: Samuel Ortiz <sameo@rivosinc.com>
+---
+ Documentation/ABI/testing/configfs-tsm | 11 +++++
+ drivers/virt/coco/Kconfig              |  1 +
+ drivers/virt/coco/tsm.c                | 58 ++++++++++++++++++++++++++
+ 3 files changed, 70 insertions(+)
+
+diff --git a/Documentation/ABI/testing/configfs-tsm b/Documentation/ABI/testing/configfs-tsm
+index 5d20a872475e..dc5c68a49625 100644
+--- a/Documentation/ABI/testing/configfs-tsm
++++ b/Documentation/ABI/testing/configfs-tsm
+@@ -81,6 +81,17 @@ Description:
+ 		(RO) Indicates the minimum permissible value that can be written
+ 		to @privlevel.
+ 
++What:		/sys/kernel/config/tsm/rtmrs/$name/digest
++Date:		January, 2024
++KernelVersion:	v6.8
++Contact:	linux-coco@lists.linux.dev
++Description:
++		(RW) The value in this attribute is the Runtime Measurement
++		Register (RTMR) digest. Callers can extend this digest with
++		additional hashes by writing into it. Binary blobs written to
++		this attribute must be of the exact length used by the hash
++		algorithm for this RTMR.
++
+ What:		/sys/kernel/config/tsm/rtmrs/$name/index
+ Date:		January, 2024
+ KernelVersion:	v6.8
+diff --git a/drivers/virt/coco/Kconfig b/drivers/virt/coco/Kconfig
+index 87d142c1f932..5d924bae1ed8 100644
+--- a/drivers/virt/coco/Kconfig
++++ b/drivers/virt/coco/Kconfig
+@@ -5,6 +5,7 @@
+ 
+ config TSM_REPORTS
+ 	select CONFIGFS_FS
++	select CRYPTO_HASH_INFO
+ 	tristate
+ 
+ source "drivers/virt/coco/efi_secret/Kconfig"
+diff --git a/drivers/virt/coco/tsm.c b/drivers/virt/coco/tsm.c
+index d03cf5173bc9..b4f8cf6ca149 100644
+--- a/drivers/virt/coco/tsm.c
++++ b/drivers/virt/coco/tsm.c
+@@ -551,6 +551,63 @@ static struct configfs_attribute *tsm_rtmr_attrs[] = {
+ 	NULL,
+ };
+ 
++static ssize_t tsm_rtmr_digest_read(struct config_item *cfg, void *buf,
++				    size_t count)
++{
++	struct tsm_rtmr_state *rtmr_state = to_tsm_rtmr_state(cfg);
++	int rc, digest_size = hash_digest_size[rtmr_state->alg];
++
++	/* configfs is asking for the digest size */
++	if (!buf)
++		return digest_size;
++
++	if (!is_rtmr_configured(rtmr_state))
++		return -ENXIO;
++
++	if (count > TSM_DIGEST_MAX || count < digest_size)
++		return -EINVAL;
++
++	/* Read from the cached digest */
++	if (rtmr_state->cached_digest) {
++		memcpy(buf, rtmr_state->digest, count);
++		return digest_size;
++	}
++
++	/* Slow path, this RTMR got extended */
++	guard(rwsem_write)(&tsm_rwsem);
++	rc = tsm_rtmr_read(&provider, rtmr_state->index, buf, count);
++	if (rc < 0)
++		return rc;
++
++	/* Update the cached digest */
++	memcpy(rtmr_state->digest, buf, count);
++	rtmr_state->cached_digest = true;
++
++	return rc;
++}
++
++static ssize_t tsm_rtmr_digest_write(struct config_item *cfg,
++				     const void *buf, size_t count)
++{
++	struct tsm_rtmr_state *rtmr_state = to_tsm_rtmr_state(cfg);
++
++	if (!is_rtmr_configured(rtmr_state))
++		return -ENXIO;
++
++	if (count > TSM_DIGEST_MAX || count < hash_digest_size[rtmr_state->alg])
++		return -EINVAL;
++
++	guard(rwsem_write)(&tsm_rwsem);
++	rtmr_state->cached_digest = false;
++	return tsm_rtmr_extend(&provider, rtmr_state->index, buf, count);
++}
++CONFIGFS_BIN_ATTR(tsm_rtmr_, digest, NULL, TSM_DIGEST_MAX);
++
++static struct configfs_bin_attribute *tsm_rtmr_bin_attrs[] = {
++	&tsm_rtmr_attr_digest,
++	NULL,
++};
++
+ static void tsm_rtmr_item_release(struct config_item *cfg)
+ {
+ 	struct tsm_rtmr_state *state = to_tsm_rtmr_state(cfg);
+@@ -564,6 +621,7 @@ static struct configfs_item_operations tsm_rtmr_item_ops = {
+ 
+ const struct config_item_type tsm_rtmr_type = {
+ 	.ct_owner = THIS_MODULE,
++	.ct_bin_attrs = tsm_rtmr_bin_attrs,
+ 	.ct_attrs = tsm_rtmr_attrs,
+ 	.ct_item_ops = &tsm_rtmr_item_ops,
+ };
+-- 
+2.43.0
+
