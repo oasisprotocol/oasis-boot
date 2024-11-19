@@ -1,6 +1,6 @@
 DESCRIPTION = "Minimal root filesystem for a stage2."
 
-PACKAGE_INSTALL = "stage2-base busybox libgcc ${VIRTUAL-RUNTIME_base-utils} ${ROOTFS_BOOTSTRAP_INSTALL}"
+PACKAGE_INSTALL = "stage2-base busybox libgcc libssl ${VIRTUAL-RUNTIME_base-utils} ${ROOTFS_BOOTSTRAP_INSTALL}"
 
 IMAGE_FEATURES = ""
 
