@@ -14,7 +14,7 @@ make sure Docker is available.
 make
 ```
 
-The resulting images will be located in `build/tmp/deploy/images/tdx`.
+The resulting artifacts will be located in `build/artifacts`.
 
 ## Targets
 
