@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# Abort on failure.
+set -e
+
+# Mount tmpfs so we will be able to update resolv.conf.
+mount none -t tmpfs /tmp
+
+# Start DHCP client to bring up the interfaces.
+udhcpc -i eth0 -q -n

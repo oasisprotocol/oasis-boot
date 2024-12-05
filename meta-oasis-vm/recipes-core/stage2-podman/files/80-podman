@@ -1,0 +1,25 @@
+#!/bin/sh
+
+# Abort on failure.
+set -e
+
+# Mount cgroups.
+mount -t cgroup2 none /sys/fs/cgroup
+# Create /dev/shm for podman locks.
+mkdir -p /dev/shm
+mount -t tmpfs none /dev/shm
+
+# Create the necessary directories on ephemeral storage.
+mkdir -p /storage/containers/run
+mkdir -p /storage/containers/graph
+mkdir -p /storage/containers/graph/tmp
+mkdir -p /storage/containers/net
+
+# Update TUN device permissions.
+chmod 0666 /dev/net/tun
+
+# Use podman-compose to start up containers when defined.
+if [ -d "/etc/oasis/containers" ]; then
+	cd /etc/oasis/containers
+	podman-compose up --detach &
+fi

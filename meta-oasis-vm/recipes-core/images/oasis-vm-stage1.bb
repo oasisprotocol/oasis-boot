@@ -27,6 +27,6 @@ COMPATIBLE_HOST = "x86_64.*-linux"
 # provide the console device.
 IMAGE_PREPROCESS_COMMAND:append = " stage1_prepare_rootfs"
 stage1_prepare_rootfs() {
-    mkdir ${IMAGE_ROOTFS}/dev
+    mkdir -p ${IMAGE_ROOTFS}/dev
     mknod -m 622 ${IMAGE_ROOTFS}/dev/console c 5 1
 }
