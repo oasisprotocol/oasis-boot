@@ -61,7 +61,7 @@ veritysetup open \
 
 # Mount stage 2 root filesystem (read-only).
 mkdir -p /stage2
-mount /dev/mapper/stage2 /stage2
+mount -t squashfs /dev/mapper/stage2 /stage2
 
 # When stage 2 storage filesystem offset is configured, set up read-write ephemeral storage.
 if [[ -n "${stage2_storage_mode}" && -d /stage2/storage ]]; then
