@@ -34,11 +34,13 @@ build-inner:
 	@source poky/oe-init-build-env build/ && \
 		bitbake oasis-vm-stage1 && \
 		bitbake oasis-vm-stage2-basic && \
+		bitbake oasis-vm-stage2-podman && \
 		bitbake ovmf
 	@rm -rf $(FINAL_ARTIFACTS_DIR)
 	@mkdir -p $(FINAL_ARTIFACTS_DIR)
 	@cp $(INTERMEDIATE_ARTIFACTS_DIR)/ovmf.tdx.fd $(FINAL_ARTIFACTS_DIR)
 	@cp $(INTERMEDIATE_ARTIFACTS_DIR)/oasis-vm-stage2-basic-tdx.tar.bz2 $(FINAL_ARTIFACTS_DIR)/stage2-basic.tar.bz2
+	@cp $(INTERMEDIATE_ARTIFACTS_DIR)/oasis-vm-stage2-podman-tdx.tar.bz2 $(FINAL_ARTIFACTS_DIR)/stage2-podman.tar.bz2
 	@cp $(INTERMEDIATE_ARTIFACTS_DIR)/bzImage-initramfs-tdx.bin $(FINAL_ARTIFACTS_DIR)/stage1.bin
 
 # Cleanup.
