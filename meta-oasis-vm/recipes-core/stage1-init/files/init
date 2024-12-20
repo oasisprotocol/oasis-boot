@@ -34,11 +34,11 @@ for cfg in $(cat /proc/cmdline | xargs -n1); do
 			stage2_storage_mode="${cfg//oasis.stage2.storage_mode=}"
 		;;
 		oasis.stage2.storage_offset=*)
-			# Stage 2 storage space offset.
+			# Stage 2 storage space offset (in 512-byte sectors).
 			stage2_storage_offset="${cfg//oasis.stage2.storage_offset=}"
 		;;
 		oasis.stage2.storage_size=*)
-			# Stage 2 storage space size.
+			# Stage 2 storage space size (in 512-byte sectors).
 			stage2_storage_size="${cfg//oasis.stage2.storage_size=}"
 		;;
 	esac
@@ -50,13 +50,30 @@ if [[ -z "${stage2_root_hash}" || -z "${stage2_hash_offset}" ]]; then
 	exit 1
 fi
 
-# Set up dm-verity for the stage 2 root filesystem on /dev/vda.
+# Set up our own partitions using dm-linear:
+#
+# part-rootfs    (0 - storage_offset)
+# part-ephemeral (storage_offset - storage_offset + storage_size)
+#
+if [[ -z "${stage2_storage_offset}" ]]; then
+	# No ephemeral storage, just create the rootfs device over the entire thing.
+	stage2_size=$(blockdev --getsz /dev/vda)
+	echo "0 ${stage2_size} linear /dev/vda 0" | dmsetup create part-rootfs
+else
+	echo "0 ${stage2_storage_offset} linear /dev/vda 0" | dmsetup create part-rootfs
+	echo "0 ${stage2_storage_size} linear /dev/vda ${stage2_storage_offset}" | dmsetup create part-ephemeral
+fi
+
+# Ensure all device nodes get created.
+dmsetup mknodes
+
+# Set up dm-verity for the stage 2 root filesystem on /dev/mapper/part-rootfs.
 veritysetup open \
 	--hash-offset=${stage2_hash_offset} \
 	--panic-on-corruption \
-	/dev/vda \
+	/dev/mapper/part-rootfs \
 	stage2 \
-	/dev/vda \
+	/dev/mapper/part-rootfs \
 	${stage2_root_hash}
 
 # Mount stage 2 root filesystem (read-only).
@@ -78,16 +95,15 @@ if [[ -n "${stage2_storage_mode}" && -d /stage2/storage ]]; then
 			storage_key=$(dd if=/dev/urandom bs=1024 count=1 2>/dev/null | tr -dc 'a-zA-Z0-9' | dd bs=1 count=64 2>/dev/null)
 			# Format block device with dm-integrity and dm-crypt setup.
 			echo -n "${storage_key}" | cryptsetup luksFormat \
-				--offset ${stage2_storage_offset} \
 				--type luks2 \
 				--integrity hmac-sha256 \
-				--integrity-no-wipe \
-				/dev/vda
+				--disable-locks \
+				/dev/mapper/part-ephemeral
 			# Open block device.
 			echo -n "${storage_key}" | cryptsetup open \
-				--offset ${stage2_storage_offset} \
 				--type luks2 \
-				/dev/vda \
+				--disable-locks \
+				/dev/mapper/part-ephemeral \
 				storage
 			# Create and mount filesystem.
 			mkfs.ext4 /dev/mapper/storage
