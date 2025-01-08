@@ -1,10 +1,9 @@
 #!/bin/sh
 
-# Abort on failure.
-set -e
+# Execute all registered handlers.
+for file in /etc/oasis/post-registration.d/*; do
+  if [ -f "$file" ]; then
+    $file
+  fi
+done
 
-# Mount tmpfs so we will be able to update resolv.conf.
-mount none -t tmpfs /tmp
-
-# Start DHCP client to bring up the interfaces.
-udhcpc -i eth0 -q -n

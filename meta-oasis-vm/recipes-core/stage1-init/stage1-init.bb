@@ -5,7 +5,7 @@ LIC_FILES_CHKSUM = "file://${COREBASE}/meta/COPYING.MIT;md5=3da9cfbcb788c80a0384
 
 PR = "r2"
 
-RDEPENDS:${PN} = "busybox cryptsetup"
+RDEPENDS:${PN} = "busybox cryptsetup e2fsprogs-mke2fs"
 
 SRC_URI = "file://init \
           "

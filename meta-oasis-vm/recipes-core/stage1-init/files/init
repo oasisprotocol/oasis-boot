@@ -16,6 +16,9 @@ mount none -t devpts /dev/pts
 # in a different TD identity.
 stage2_root_hash=""
 stage2_hash_offset=""
+stage2_storage_mode=""
+stage2_storage_offset=""
+stage2_storage_size=""
 for cfg in $(cat /proc/cmdline | xargs -n1); do
 	case $cfg in
 		oasis.stage2.roothash=*)
@@ -26,6 +29,18 @@ for cfg in $(cat /proc/cmdline | xargs -n1); do
 			# Stage 2 hash offset.
 			stage2_hash_offset="${cfg//oasis.stage2.hash_offset=}"
 		;;
+		oasis.stage2.storage_mode=*)
+			# Stage 2 ephemeral storage mode.
+			stage2_storage_mode="${cfg//oasis.stage2.storage_mode=}"
+		;;
+		oasis.stage2.storage_offset=*)
+			# Stage 2 storage space offset (in 512-byte sectors).
+			stage2_storage_offset="${cfg//oasis.stage2.storage_offset=}"
+		;;
+		oasis.stage2.storage_size=*)
+			# Stage 2 storage space size (in 512-byte sectors).
+			stage2_storage_size="${cfg//oasis.stage2.storage_size=}"
+		;;
 	esac
 done
 
@@ -35,16 +50,92 @@ if [[ -z "${stage2_root_hash}" || -z "${stage2_hash_offset}" ]]; then
 	exit 1
 fi
 
-# Set up dm-verity for the stage 2 root filesystem on /dev/vda.
+# Set up our own partitions using dm-linear:
+#
+# part-rootfs    (0 - storage_offset)
+# part-ephemeral (storage_offset - storage_offset + storage_size)
+#
+if [[ -z "${stage2_storage_offset}" ]]; then
+	# No ephemeral storage, just create the rootfs device over the entire thing.
+	stage2_size=$(blockdev --getsz /dev/vda)
+	echo "0 ${stage2_size} linear /dev/vda 0" | dmsetup create part-rootfs
+else
+	echo "0 ${stage2_storage_offset} linear /dev/vda 0" | dmsetup create part-rootfs
+	echo "0 ${stage2_storage_size} linear /dev/vda ${stage2_storage_offset}" | dmsetup create part-ephemeral
+fi
+
+# Ensure all device nodes get created.
+dmsetup mknodes
+
+# Set up dm-verity for the stage 2 root filesystem on /dev/mapper/part-rootfs.
 veritysetup open \
 	--hash-offset=${stage2_hash_offset} \
 	--panic-on-corruption \
-	/dev/vda \
+	/dev/mapper/part-rootfs \
 	stage2 \
-	/dev/vda \
+	/dev/mapper/part-rootfs \
 	${stage2_root_hash}
 
-# Mount stage 2 root filesystem and switch into it.
+# Mount stage 2 root filesystem (read-only).
 mkdir -p /stage2
-mount /dev/mapper/stage2 /stage2
+mount -t squashfs /dev/mapper/stage2 /stage2
+
+# When stage 2 storage filesystem offset is configured, set up read-write ephemeral storage.
+if [[ -n "${stage2_storage_mode}" && -d /stage2/storage ]]; then
+	echo "Using ephemeral storage mode: ${stage2_storage_mode}"
+
+	case $stage2_storage_mode in
+		disk)
+			if [[ -z "${stage2_storage_offset}" || -z "${stage2_storage_size}" ]]; then
+				echo "Missing disk-backed stage 2 ephemeral storage configuration."
+				exit 1
+			fi
+
+			# Generate a random key (this is ephemeral storage).
+			storage_key=$(dd if=/dev/urandom bs=1024 count=1 2>/dev/null | tr -dc 'a-zA-Z0-9' | dd bs=1 count=64 2>/dev/null)
+			# Format block device with dm-integrity and dm-crypt setup.
+			echo -n "${storage_key}" | cryptsetup luksFormat \
+				--type luks2 \
+				--integrity hmac-sha256 \
+				--disable-locks \
+				/dev/mapper/part-ephemeral
+			# Open block device.
+			echo -n "${storage_key}" | cryptsetup open \
+				--type luks2 \
+				--disable-locks \
+				/dev/mapper/part-ephemeral \
+				storage
+			# Create and mount filesystem.
+			mkfs.ext4 /dev/mapper/storage
+			mount /dev/mapper/storage /stage2/storage
+		;;
+		ram)
+			if [[ -z "${stage2_storage_size}" ]]; then
+				echo "Missing ram-backed stage 2 ephemeral storage configuration."
+				exit 1
+			fi
+
+			# Just use tmpfs.
+			mount none -t tmpfs -o size=${stage2_storage_size} /stage2/storage
+		;;
+		*)
+			echo "Unsupported stage 2 ephemeral storage mode."
+			exit 1
+		;;
+	esac
+
+	# Point /run to ephemeral storage if it exists.
+	if [ -d /stage2/run ]; then
+		mkdir /stage2/storage/run
+		mount --bind /stage2/storage/run /stage2/run
+	fi
+	# Point /var to ephemeral storage if it exists.
+	if [ -d /stage2/var ]; then
+		mkdir /stage2/storage/var
+		mkdir -p /stage2/storage/var/{lib,cache}
+		mount --bind /stage2/storage/var /stage2/var
+	fi
+fi
+
+# Switch into the new root.
 exec switch_root /stage2 /init
