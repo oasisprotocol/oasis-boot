@@ -53,15 +53,15 @@ fi
 # Set up our own partitions using dm-linear:
 #
 # part-rootfs    (0 - storage_offset)
-# part-ephemeral (storage_offset - storage_offset + storage_size)
+# part-storage   (storage_offset - storage_offset + storage_size)
 #
 if [[ -z "${stage2_storage_offset}" ]]; then
-	# No ephemeral storage, just create the rootfs device over the entire thing.
+	# No storage, just create the rootfs device over the entire thing.
 	stage2_size=$(blockdev --getsz /dev/vda)
 	echo "0 ${stage2_size} linear /dev/vda 0" | dmsetup create part-rootfs
 else
 	echo "0 ${stage2_storage_offset} linear /dev/vda 0" | dmsetup create part-rootfs
-	echo "0 ${stage2_storage_size} linear /dev/vda ${stage2_storage_offset}" | dmsetup create part-ephemeral
+	echo "0 ${stage2_storage_size} linear /dev/vda ${stage2_storage_offset}" | dmsetup create part-storage
 fi
 
 # Ensure all device nodes get created.
@@ -80,14 +80,16 @@ veritysetup open \
 mkdir -p /stage2
 mount -t squashfs /dev/mapper/stage2 /stage2
 
-# When stage 2 storage filesystem offset is configured, set up read-write ephemeral storage.
-if [[ -n "${stage2_storage_mode}" && -d /stage2/storage ]]; then
-	echo "Using ephemeral storage mode: ${stage2_storage_mode}"
+# When stage 2 storage filesystem offset is configured, set up read-write storage. Stage 1
+# is only able to set up simple ephemeral storage while advanced persistent variants are
+# left up to stage 2.
+if [[ -n "${stage2_storage_mode}" && -d /stage2/storage && "${stage2_storage_mode}" != "custom" ]]; then
+	echo "Using storage mode: ${stage2_storage_mode}"
 
 	case $stage2_storage_mode in
 		disk)
 			if [[ -z "${stage2_storage_offset}" || -z "${stage2_storage_size}" ]]; then
-				echo "Missing disk-backed stage 2 ephemeral storage configuration."
+				echo "Missing disk-backed stage 2 storage configuration."
 				exit 1
 			fi
 
@@ -98,12 +100,12 @@ if [[ -n "${stage2_storage_mode}" && -d /stage2/storage ]]; then
 				--type luks2 \
 				--integrity hmac-sha256 \
 				--disable-locks \
-				/dev/mapper/part-ephemeral
+				/dev/mapper/part-storage
 			# Open block device.
 			echo -n "${storage_key}" | cryptsetup open \
 				--type luks2 \
 				--disable-locks \
-				/dev/mapper/part-ephemeral \
+				/dev/mapper/part-storage \
 				storage
 			# Create and mount filesystem.
 			mkfs.ext4 /dev/mapper/storage
@@ -111,7 +113,7 @@ if [[ -n "${stage2_storage_mode}" && -d /stage2/storage ]]; then
 		;;
 		ram)
 			if [[ -z "${stage2_storage_size}" ]]; then
-				echo "Missing ram-backed stage 2 ephemeral storage configuration."
+				echo "Missing ram-backed stage 2 storage configuration."
 				exit 1
 			fi
 
@@ -119,17 +121,17 @@ if [[ -n "${stage2_storage_mode}" && -d /stage2/storage ]]; then
 			mount none -t tmpfs -o size=${stage2_storage_size} /stage2/storage
 		;;
 		*)
-			echo "Unsupported stage 2 ephemeral storage mode."
+			echo "Unsupported stage 2 storage mode."
 			exit 1
 		;;
 	esac
 
-	# Point /run to ephemeral storage if it exists.
+	# Point /run to storage if it exists.
 	if [ -d /stage2/run ]; then
 		mkdir /stage2/storage/run
 		mount --bind /stage2/storage/run /stage2/run
 	fi
-	# Point /var to ephemeral storage if it exists.
+	# Point /var to storage if it exists.
 	if [ -d /stage2/var ]; then
 		mkdir /stage2/storage/var
 		mkdir -p /stage2/storage/var/{lib,cache}

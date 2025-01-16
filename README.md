@@ -22,10 +22,28 @@ The resulting artifacts will be located in `build/artifacts`.
 
 Builds the Stage 1 image which is a Linux kernel with an initramfs that can
 load Stage 2 from the first available volume (e.g. `/dev/vda`). It expects the
-volume to be a dm-verity device where the configuration must be passed via the
-kernel command line.
+volume to be linearly partitioned as follows:
 
-The following command line arguments are expected:
+
+* `part-rootfs` (start: `0` end: `storage_offset`) is the partition containing
+  the root filesystem.
+
+* `part-storage` (start: `storage_offset` end: `storage_offset + storage_size`)
+  is the storage partition.
+
+Where `storage_offset` and `storage_size` are obtained from the kernel command
+line using the following parameters:
+
+* `oasis.stage2.storage_offset` is the `storage_offset` in 512-byte sectors.
+* `oasis.stage2.storage_size` is the `storage_size` in 512-byte sectors.
+
+The partitions are set up by using dm-linear to map the regions into respective
+block devices. In case the `storage_offset` is not defined, only `part-rootfs`
+is mapped.
+
+The root partition is expected to be a dm-verity device where its configuration
+is also passed via the kernel command line. The following command line arguments
+are expected:
 
 * `oasis.stage2.roothash=ROOTHASH` where `ROOTHASH` should be the hex-encoded
   root hash of the dm-verity device.
@@ -34,14 +52,22 @@ The following command line arguments are expected:
   specifying the dm-verity hash offset within the Stage 2 image.
 
 If the command line arguments are not provided, Stage 1 will panic. Otherwise
-it will map `/dev/vda` using dm-verity and will then proceed to mount the
-Stage 2 filesystem. Finally, it will switch the root filesystem to Stage 2 and
-execute `/init`.
+it will map `/dev/mapper/part-rootfs` using dm-verity and will then proceed to
+mount the Stage 2 filesystem (which is expected to be squashfs). Finally, it
+will switch the root filesystem to Stage 2 and execute `/init`.
 
 ### `oasis-vm-stage2-basic`
 
 Builds the basic Stage 2 _template_ which is a `tar.bz2` archive containing a
 minimal root filesystem that can be used as Stage 2 for a trivial Oasis runtime.
+
+See below for information on using these templates.
+
+### `oasis-vm-stage2-podman`
+
+Builds the basic Stage 2 _template_ which is a `tar.bz2` archive containing a
+minimal root filesystem that can be used as Stage 2 for a Podman container
+based system.
 
 See below for information on using these templates.
 
@@ -51,30 +77,7 @@ Builds the virtual firmware that performs early boot of a TD.
 
 ## Using Templates
 
-In order to prepare a proper Stage 2 image from the given template one should do
-the following:
+These templates are meant to be used with the [Oasis CLI] using the `rofl build`
+subcommand to build ROFL app images.
 
-1. Unpack the template into a temporary directory, e.g. `workdir`.
-1. Copy the built Oasis runtime binary into `workdir/init`.
-1. Create a suitable filesystem from this directory, for example:
-   ```
-   dd if=/dev/zero of=${img} seek=${size} count=0 bs=1024
-   mkfs.ext4 -E root_owner=0:0 ${img} -d workdir
-   ```
-
-   Note the `${size}` which defines the size of the filesystem and also the
-   offset for the dm-verity hash tree.
-
-1. Create a dm-verity compatible image:
-   ```
-   veritysetup format --data-block-size=4096 --hash-block-size=4096 ${img} ${img}.hash
-   ```
-
-   Record the root hash.
-
-1. Concatenate the two files to obtain the final image:
-   ```
-   cat ${img} ${img}.hash > ${img}.img
-   ```
-
-You can then use the given image as Stage 2.
+[Oasis CLI]: https://github.com/oasisprotocol/cli
