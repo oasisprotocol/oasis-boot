@@ -18,6 +18,9 @@ mkdir -p /storage/containers/net
 # Update TUN device permissions.
 chmod 0666 /dev/net/tun
 
+# Migrate existing containers if needed (e.g. when using persistent storage).
+podman system migrate
+
 # Use podman-compose to start up containers when defined.
 if [ -d "/etc/oasis/containers" ]; then
 	cd /etc/oasis/containers
