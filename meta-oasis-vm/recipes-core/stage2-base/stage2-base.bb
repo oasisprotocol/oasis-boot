@@ -6,7 +6,7 @@ SRC_URI = "file://init.post-registration \
            file://00-network \
           "
 
-RDEPENDS:${PN} = "busybox busybox-udhcpc cryptsetup e2fsprogs-mke2fs"
+RDEPENDS:${PN} = "busybox busybox-udhcpc cryptsetup e2fsprogs-mke2fs e2fsprogs-resize2fs"
 
 S = "${WORKDIR}"
 
