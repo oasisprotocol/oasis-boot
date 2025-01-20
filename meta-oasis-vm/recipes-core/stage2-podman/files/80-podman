@@ -9,7 +9,11 @@ mount -t cgroup2 none /sys/fs/cgroup
 mkdir -p /dev/shm
 mount -t tmpfs none /dev/shm
 
-# Create the necessary directories on ephemeral storage.
+# Cleanup after reboot.
+rm -rf /storage/containers/run
+rm -rf /storage/containers/net
+rm -rf /var/lib/cni
+# Create the necessary directories in storage.
 mkdir -p /storage/containers/run
 mkdir -p /storage/containers/graph
 mkdir -p /storage/containers/graph/tmp
@@ -20,9 +24,10 @@ chmod 0666 /dev/net/tun
 
 # Migrate existing containers if needed (e.g. when using persistent storage).
 podman system migrate
+podman system prune --external
 
 # Use podman-compose to start up containers when defined.
 if [ -d "/etc/oasis/containers" ]; then
 	cd /etc/oasis/containers
-	podman-compose up --detach &
+	podman-compose up --detach --remove-orphans --force-recreate &
 fi
