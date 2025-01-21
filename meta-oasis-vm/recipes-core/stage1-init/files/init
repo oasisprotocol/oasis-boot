@@ -80,6 +80,11 @@ veritysetup open \
 mkdir -p /stage2
 mount -t squashfs /dev/mapper/stage2 /stage2
 
+# Mount tmpfs to /run if it exists.
+if [ -d /stage2/run ]; then
+	mount -t tmpfs none /stage2/run
+fi
+
 # When stage 2 storage filesystem offset is configured, set up read-write storage. Stage 1
 # is only able to set up simple ephemeral storage while advanced persistent variants are
 # left up to stage 2.
@@ -126,11 +131,6 @@ if [[ -n "${stage2_storage_mode}" && -d /stage2/storage && "${stage2_storage_mod
 		;;
 	esac
 
-	# Point /run to storage if it exists.
-	if [ -d /stage2/run ]; then
-		mkdir /stage2/storage/run
-		mount --bind /stage2/storage/run /stage2/run
-	fi
 	# Point /var to storage if it exists.
 	if [ -d /stage2/var ]; then
 		mkdir /stage2/storage/var
