@@ -58,14 +58,14 @@ will switch the root filesystem to Stage 2 and execute `/init`.
 
 ### `oasis-vm-stage2-basic`
 
-Builds the basic Stage 2 _template_ which is a `tar.bz2` archive containing a
+Builds the basic Stage 2 _template_ which is a squash filesystem containing a
 minimal root filesystem that can be used as Stage 2 for a trivial Oasis runtime.
 
 See below for information on using these templates.
 
 ### `oasis-vm-stage2-podman`
 
-Builds the basic Stage 2 _template_ which is a `tar.bz2` archive containing a
+Builds the basic Stage 2 _template_ which is a squash filesystem containing a
 minimal root filesystem that can be used as Stage 2 for a Podman container
 based system.
 

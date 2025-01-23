@@ -6,7 +6,7 @@ IMAGE_LINGUAS = ""
 
 LICENSE = "MIT"
 
-IMAGE_FSTYPES = "tar.bz2"
+IMAGE_FSTYPES = "squashfs"
 
 inherit core-image
 
