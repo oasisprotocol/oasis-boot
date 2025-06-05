@@ -4,10 +4,10 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=b234ee4d69f5fce4486a80fdaf4a4263"
 
 inherit setuptools3
 
-PV = "1.4.0+git"
-SRC_URI = "git://github.com/containers/podman-compose.git;branch=main;protocol=https"
+PV = "1.4.1+git"
+SRC_URI = "git://github.com/containers/podman-compose.git;branch=1.4.x;protocol=https"
 
-SRCREV = "bd29caa797c52c21462a0c63e7eb00708db79106"
+SRCREV = "b37076bc5e5a0f34d1f9e63cd3341ffda950fed8"
 
 S = "${WORKDIR}/git"
 
