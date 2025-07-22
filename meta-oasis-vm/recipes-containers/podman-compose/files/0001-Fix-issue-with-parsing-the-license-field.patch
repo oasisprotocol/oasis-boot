@@ -1,0 +1,24 @@
+From be2551c02c0090a6e4f7302d1e850978493b4092 Mon Sep 17 00:00:00 2001
+From: Jernej Kos <jernej@kos.mx>
+Date: Tue, 22 Jul 2025 13:59:45 +0200
+Subject: [PATCH] Fix issue with parsing the license field
+
+---
+ pyproject.toml | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/pyproject.toml b/pyproject.toml
+index 44a6ac4..df341f5 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -30,7 +30,6 @@ keywords = [
+     "podman",
+     "podman-compose",
+ ]
+-license = "GPL-2.0-only"
+ dynamic = ["version", "readme"]
+ 
+ [project.urls]
+-- 
+2.43.0
+
