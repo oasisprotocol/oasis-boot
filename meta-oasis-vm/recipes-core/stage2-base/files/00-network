@@ -3,6 +3,9 @@
 # Abort on failure.
 set -e
 
+# Bring up loopback interface.
+ip link set lo up
+
 # Mount tmpfs so we will be able to update resolv.conf.
 mount none -t tmpfs /tmp
 
