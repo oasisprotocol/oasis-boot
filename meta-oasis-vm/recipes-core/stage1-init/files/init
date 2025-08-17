@@ -100,21 +100,29 @@ if [[ -n "${stage2_storage_mode}" && -d /stage2/storage && "${stage2_storage_mod
 
 			# Generate a random key (this is ephemeral storage).
 			storage_key=$(dd if=/dev/urandom bs=1024 count=1 2>/dev/null | tr -dc 'a-zA-Z0-9' | dd bs=1 count=64 2>/dev/null)
+			# Use tmpfs to store the LUKS2 header.
+			mkdir -p /tmp
+			mount none -t tmpfs /tmp
 			# Format block device with dm-integrity and dm-crypt setup.
 			echo -n "${storage_key}" | cryptsetup luksFormat \
 				--type luks2 \
 				--integrity hmac-sha256 \
 				--disable-locks \
+				--header /tmp/storage-luks2-header \
 				/dev/mapper/part-storage
 			# Open block device.
 			echo -n "${storage_key}" | cryptsetup open \
 				--type luks2 \
 				--disable-locks \
+				--header /tmp/storage-luks2-header \
 				/dev/mapper/part-storage \
 				storage
 			# Create and mount filesystem.
 			mkfs.ext4 /dev/mapper/storage
 			mount /dev/mapper/storage /stage2/storage
+			# Remove LUKS2 header as it is not needed anymore.
+			rm /tmp/storage-luks2-header
+			umount /tmp
 		;;
 		ram)
 			if [[ -z "${stage2_storage_size}" ]]; then
