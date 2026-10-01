@@ -4,13 +4,13 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=b234ee4d69f5fce4486a80fdaf4a4263"
 
 inherit python_poetry_core
 
-PV = "1.5.0+git"
+PV = "1.6.0+git"
 SRC_URI = "\
     git://github.com/containers/podman-compose.git;branch=main;protocol=https \
     file://0001-Fix-issue-with-parsing-the-license-field.patch \
 "
 
-SRCREV = "f7eeda1a3db10952424af6a5b0501c269ebe3f0d"
+SRCREV = "0f6537e9cfa38f6035ac57c1716b6d55dbaf3ca4"
 
 S = "${WORKDIR}/git"
 
