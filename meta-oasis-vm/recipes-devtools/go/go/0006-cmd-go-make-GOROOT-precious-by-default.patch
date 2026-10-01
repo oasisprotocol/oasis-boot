@@ -1,4 +1,4 @@
-From a31db6f78d851741aea1e76132a84a24138a5bc6 Mon Sep 17 00:00:00 2001
+From 3d48927c9fa7228445be9249d8a7e696bb6d306d Mon Sep 17 00:00:00 2001
 From: Alex Kube <alexander.j.kube@gmail.com>
 Date: Wed, 23 Oct 2019 21:18:56 +0430
 Subject: [PATCH] cmd/go: make GOROOT precious by default
@@ -29,10 +29,10 @@ Signed-off-by: Jose Quaresma <jose.quaresma@foundries.io>
  3 files changed, 34 insertions(+)
 
 diff --git a/src/cmd/go/internal/work/action.go b/src/cmd/go/internal/work/action.go
-index a59072e..9e35ebd 100644
+index 8b3897e215ed..598e751aba4e 100644
 --- a/src/cmd/go/internal/work/action.go
 +++ b/src/cmd/go/internal/work/action.go
-@@ -754,6 +754,9 @@ func (b *Builder) addTransitiveLinkDeps(a, a1 *Action, shlib string) {
+@@ -1076,6 +1076,9 @@ func (b *Builder) addTransitiveLinkDeps(s *modload.Loader, a, a1 *Action, shlib
  			if p1 == nil || p1.Shlib == "" || haveShlib[filepath.Base(p1.Shlib)] {
  				continue
  			}
@@ -43,21 +43,21 @@ index a59072e..9e35ebd 100644
  			// TODO(rsc): The use of ModeInstall here is suspect, but if we only do ModeBuild,
  			// we'll end up building an overall library or executable that depends at runtime
 diff --git a/src/cmd/go/internal/work/build.go b/src/cmd/go/internal/work/build.go
-index 408edb5..3d60252 100644
+index 969e0029c3e2..f80f28abff63 100644
 --- a/src/cmd/go/internal/work/build.go
 +++ b/src/cmd/go/internal/work/build.go
-@@ -233,6 +233,8 @@ See also: go install, go get, go clean.
- 
- const concurrentGCBackendCompilationEnabledByDefault = true
+@@ -240,6 +240,8 @@ See also: go install, go get, go clean.
+ 	`,
+ }
  
 +var goRootPrecious bool = true
 +
  func init() {
  	// break init cycle
  	CmdBuild.Run = runBuild
-@@ -246,6 +248,10 @@ func init() {
- 		AddCoverFlags(CmdBuild, nil)
- 		AddCoverFlags(CmdInstall, nil)
+@@ -294,6 +296,10 @@ func init() {
+ 	case "gc", "gccgo":
+ 		buildCompiler{}.Set(build.Default.Compiler)
  	}
 +
 +	if x := os.Getenv("GOROOT_OVERRIDE"); x != "" {
@@ -65,13 +65,13 @@ index 408edb5..3d60252 100644
 +	}
  }
  
- // Note that flags consulted by other parts of the code
+ type BuildFlagMask int
 diff --git a/src/cmd/go/internal/work/exec.go b/src/cmd/go/internal/work/exec.go
-index 9724cd0..544df46 100644
+index 617b7ece73f0..46c0712c5bd0 100644
 --- a/src/cmd/go/internal/work/exec.go
 +++ b/src/cmd/go/internal/work/exec.go
-@@ -544,6 +544,23 @@ func (b *Builder) build(ctx context.Context, a *Action) (err error) {
- 		return err
+@@ -608,6 +608,23 @@ func (b *Builder) checkCacheForBuild(a, buildAction *Action, covMetaFileName str
+ 		return nil, err
  	}
  
 +	if goRootPrecious && (a.Package.Standard || a.Package.Goroot) {
@@ -82,19 +82,19 @@ index 9724cd0..544df46 100644
 +			a.buildID = b.fileHash(a.Package.Target)
 +			a.Package.Stale = false
 +			a.Package.StaleReason = "GOROOT-resident package"
-+			return nil
++			return nil, err
 +		}
 +		a.Package.Stale = true
 +		a.Package.StaleReason = "missing or invalid GOROOT-resident package"
 +		if b.IsCmdList {
-+			return nil
++			return nil, err
 +		}
 +	}
 +
- 	if err := sh.Mkdir(a.Objdir); err != nil {
- 		return err
+ 	if err := sh.Mkdir(buildAction.Objdir); err != nil {
+ 		return nil, err
  	}
-@@ -1737,6 +1754,14 @@ func (b *Builder) linkShared(ctx context.Context, a *Action) (err error) {
+@@ -1922,6 +1939,14 @@ func (b *Builder) linkShared(ctx context.Context, a *Action) (err error) {
  		return err
  	}
  

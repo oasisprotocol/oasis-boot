@@ -1,4 +1,4 @@
-From 687ff9d17f756145f9a58413070cccbd488d1ea2 Mon Sep 17 00:00:00 2001
+From 7c951454dc9acbb0649d38504c8237304a80fa46 Mon Sep 17 00:00:00 2001
 From: Alex Kube <alexander.j.kube@gmail.com>
 Date: Wed, 23 Oct 2019 21:15:37 +0430
 Subject: [PATCH] cmd/go: Allow GOTOOLDIR to be overridden in the environment
@@ -19,10 +19,10 @@ Signed-off-by: Jose Quaresma <jose.quaresma@foundries.io>
  2 files changed, 8 insertions(+), 2 deletions(-)
 
 diff --git a/src/cmd/dist/build.go b/src/cmd/dist/build.go
-index 32e59b4..06ee4de 100644
+index 78d55bec5599..4210466fa4ea 100644
 --- a/src/cmd/dist/build.go
 +++ b/src/cmd/dist/build.go
-@@ -259,7 +259,9 @@ func xinit() {
+@@ -272,7 +272,9 @@ func xinit() {
  	}
  	xatexit(rmworkdir)
  
@@ -32,12 +32,12 @@ index 32e59b4..06ee4de 100644
 +	}
  
  	goversion := findgoversion()
- 	isRelease = strings.HasPrefix(goversion, "release.") || strings.HasPrefix(goversion, "go")
+ 	isRelease = (strings.HasPrefix(goversion, "release.") || strings.HasPrefix(goversion, "go")) &&
 diff --git a/src/cmd/go/internal/cfg/cfg.go b/src/cmd/go/internal/cfg/cfg.go
-index a8daa2d..393ada3 100644
+index 78cbbb949e7c..96b5fc38a495 100644
 --- a/src/cmd/go/internal/cfg/cfg.go
 +++ b/src/cmd/go/internal/cfg/cfg.go
-@@ -230,7 +230,11 @@ func SetGOROOT(goroot string, isTestGo bool) {
+@@ -279,7 +279,11 @@ func SetGOROOT(goroot string, isTestGo bool) {
  			// This matches the initialization of ToolDir in go/build, except for
  			// using ctxt.GOROOT and the installed GOOS and GOARCH rather than the
  			// GOROOT, GOOS, and GOARCH reported by the runtime package.
