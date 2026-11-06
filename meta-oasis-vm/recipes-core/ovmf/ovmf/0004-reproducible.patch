@@ -1,53 +1,22 @@
-From f4ba093ea8a8a8c333c08605b3a6ff1c82712613 Mon Sep 17 00:00:00 2001
-From: Alexander Kanavin <alex.kanavin@gmail.com>
-Date: Mon, 14 Jun 2021 19:57:30 +0200
-Subject: [PATCH] reproducible
+From: Oasis <info@oasis.net>
+Subject: [PATCH] BaseTools: make paths and iteration order reproducible
 
-This patch fixes various things which make the build more reproducible. Some changes
-here only change intermediate artefacts but that means when you have two build trees
-giving differing results, the differences can be isolated more easily. The issues here
-usually become apparent with longer paths.
-
-This was all debugged with:
-TMPDIR = "${TOPDIR}/tmp"
-vs.
-TMPDIR = "${TOPDIR}/tmp-inital-mylongpath-mylongpath-mylongpath-mylongpath-mylongpath-mylongpath-mylongpath-mylongpath-mylongpath"
-
-The patch specifically:
-
- * Sorts output in GNUmakefile
- * Always generates indirect flags files used to avoid pathlength issues else the
-   compile commands suddenly change when using longer paths
- * Sorts the AutoGenTimeStamp file contents
- * Makes the TargetDescBlock objects from BuildEngine sortable to allow the makefile fix
- * Fix ElfConvert within GenFw so that only the basename of the binary being converted
-   is used, else the output from "GenFw XXX.bin" differs from "GenFw /long/path/XXX.bin"
-   with sufficiently long paths
-
-Upstream-Status: Submitted [https://github.com/tianocore/edk2/pull/2176]
-Signed-off-by: Richard Purdie <richard.purdie@linuxfoundation.org>
-Signed-off-by: Alexander Kanavin <alex.kanavin@gmail.com>
----
- BaseTools/Source/C/GenFw/Elf64Convert.c       |  8 ++++---
- .../Source/Python/AutoGen/BuildEngine.py      |  3 +++
- BaseTools/Source/Python/AutoGen/GenMake.py    | 24 +++++++++----------
- .../Source/Python/AutoGen/ModuleAutoGen.py    |  5 +++-
- 4 files changed, 24 insertions(+), 16 deletions(-)
+Upstream-Status: Inappropriate [Yocto reproducible builds]
 
 diff --git a/BaseTools/Source/C/GenFw/Elf64Convert.c b/BaseTools/Source/C/GenFw/Elf64Convert.c
-index 9d04fc612e..83fd6c9c05 100644
+index 1208137bca..415fa74b48 100644
 --- a/BaseTools/Source/C/GenFw/Elf64Convert.c
 +++ b/BaseTools/Source/C/GenFw/Elf64Convert.c
-@@ -13,6 +13,8 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
- #ifndef __GNUC__
+@@ -15,6 +15,8 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
  #include <windows.h>
+ #undef RUNTIME_FUNCTION
  #include <io.h>
 +#else
 +#define _GNU_SOURCE
  #endif
  #include <assert.h>
  #include <stdio.h>
-@@ -988,7 +990,7 @@ ScanSections64 (
+@@ -1018,7 +1020,7 @@ ScanSections64 (
    }
    mCoffOffset = mDebugOffset + sizeof(EFI_IMAGE_DEBUG_DIRECTORY_ENTRY) +
                  sizeof(EFI_IMAGE_DEBUG_CODEVIEW_NB10_ENTRY) +
@@ -56,7 +25,16 @@ index 9d04fc612e..83fd6c9c05 100644
  
    //
    // Add more space in the .debug data region for the DllCharacteristicsEx
-@@ -2299,7 +2301,7 @@ WriteDebug64 (
+@@ -1049,7 +1051,7 @@ ScanSections64 (
+     const UINT8 *SymName;
+ 
+     mExportOffset = mCoffOffset;
+-    mExportSize = sizeof(EFI_IMAGE_EXPORT_DIRECTORY) + strlen(mInImageName) + 1;
++    mExportSize = sizeof(EFI_IMAGE_EXPORT_DIRECTORY) + strlen(basename(mInImageName)) + 1;
+ 
+     for (i = 0; i < mEhdr->e_shnum; i++) {
+ 
+@@ -2451,7 +2453,7 @@ WriteDebug64 (
    EFI_IMAGE_DEBUG_CODEVIEW_NB10_ENTRY         *Nb10;
    EFI_IMAGE_DEBUG_EX_DLLCHARACTERISTICS_ENTRY *DllEntry;
  
@@ -65,7 +43,7 @@ index 9d04fc612e..83fd6c9c05 100644
  
    NtHdr = (EFI_IMAGE_OPTIONAL_HEADER_UNION *)(mCoffFile + mNtHdrOffset);
    DataDir = &NtHdr->Pe32Plus.OptionalHeader.DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_DEBUG];
-@@ -2332,7 +2334,7 @@ WriteDebug64 (
+@@ -2484,7 +2486,7 @@ WriteDebug64 (
  
    Nb10 = (EFI_IMAGE_DEBUG_CODEVIEW_NB10_ENTRY*)(Dir + 1);
    Nb10->Signature = CODEVIEW_SIGNATURE_NB10;
@@ -74,8 +52,24 @@ index 9d04fc612e..83fd6c9c05 100644
  }
  
  STATIC
+@@ -2545,13 +2547,13 @@ WriteExport64 (
+   ExportDir->AddressOfNameOrdinals = ExportDir->AddressOfNames + EFI_IMAGE_EXPORT_ADDR_SIZE * mExportSymNum;
+ 
+   FileNameOffset = ExportDir->AddressOfNameOrdinals + EFI_IMAGE_EXPORT_ORDINAL_SIZE * mExportSymNum;
+-  NameOffset = FileNameOffset + strlen(mInImageName) + 1;
++  NameOffset = FileNameOffset + strlen(basename(mInImageName)) + 1;
+ 
+   // Write Input image Name RVA
+   ExportDir->Name = FileNameOffset;
+ 
+   // Write Input image Name
+-  strcpy((char *)(mCoffFile + FileNameOffset), mInImageName);
++  strcpy((char *)(mCoffFile + FileNameOffset), basename(mInImageName));
+ 
+   for (Index = 0; Index < mExportSymNum; Index++) {
+     //
 diff --git a/BaseTools/Source/Python/AutoGen/BuildEngine.py b/BaseTools/Source/Python/AutoGen/BuildEngine.py
-index 45b39d7878..3fed7d1736 100644
+index b829a2503c..afe826b78f 100644
 --- a/BaseTools/Source/Python/AutoGen/BuildEngine.py
 +++ b/BaseTools/Source/Python/AutoGen/BuildEngine.py
 @@ -70,6 +70,9 @@ class TargetDescBlock(object):
@@ -89,10 +83,10 @@ index 45b39d7878..3fed7d1736 100644
          if Input not in self.Inputs:
              self.Inputs.append(Input)
 diff --git a/BaseTools/Source/Python/AutoGen/GenMake.py b/BaseTools/Source/Python/AutoGen/GenMake.py
-index fbd35d4989..5ddd544d17 100755
+index b729103efd..afc5b14a8a 100755
 --- a/BaseTools/Source/Python/AutoGen/GenMake.py
 +++ b/BaseTools/Source/Python/AutoGen/GenMake.py
-@@ -575,7 +575,7 @@ cleanlib:
+@@ -579,7 +579,7 @@ cleanlib:
                  os.remove(RespFileList)
  
          # convert source files and binary files to build targets
@@ -101,7 +95,7 @@ index fbd35d4989..5ddd544d17 100755
          if len(self.ResultFileList) == 0 and len(MyAgo.SourceFileList) != 0:
              EdkLogger.error("build", AUTOGEN_ERROR, "Nothing to build",
                              ExtraData="[%s]" % str(MyAgo))
-@@ -726,7 +726,7 @@ cleanlib:
+@@ -730,7 +730,7 @@ cleanlib:
          OutputFile = ''
          DepsFileList = []
  
@@ -110,7 +104,7 @@ index fbd35d4989..5ddd544d17 100755
              if Cmd[2]:
                  for CopyCmd in Cmd[2]:
                      Src, Dst = CopyCmd
-@@ -759,7 +759,7 @@ cleanlib:
+@@ -763,7 +763,7 @@ cleanlib:
              self.BuildTargetList.append('\t%s' % CmdString)
  
              self.ParseSecCmd(DepsFileList, Cmd[1])
@@ -119,7 +113,7 @@ index fbd35d4989..5ddd544d17 100755
                  self.BuildTargetList.append('%s : %s' % (self.ReplaceMacro(SecOutputFile), self.ReplaceMacro(SecDepsFile)))
                  self.BuildTargetList.append('\t%s' % self.ReplaceMacro(SecCmd))
              self.FfsOutputFileList = []
-@@ -798,13 +798,13 @@ cleanlib:
+@@ -802,13 +802,13 @@ cleanlib:
  
      def CommandExceedLimit(self):
          FlagDict = {
@@ -140,7 +134,7 @@ index fbd35d4989..5ddd544d17 100755
                     }
  
          RespDict = {}
-@@ -1007,9 +1007,9 @@ cleanlib:
+@@ -1022,9 +1022,9 @@ cleanlib:
                  if not self.ObjTargetDict.get(T.Target.SubDir):
                      self.ObjTargetDict[T.Target.SubDir] = set()
                  self.ObjTargetDict[T.Target.SubDir].add(NewFile)
@@ -153,10 +147,10 @@ index fbd35d4989..5ddd544d17 100755
                  if T.GenFileListMacro and T.FileListMacro not in self.FileListMacros:
                      self.FileListMacros[T.FileListMacro] = []
 diff --git a/BaseTools/Source/Python/AutoGen/ModuleAutoGen.py b/BaseTools/Source/Python/AutoGen/ModuleAutoGen.py
-index 65a2176ca9..318b9611ce 100755
+index c358d7f0e3..6ed48091fa 100755
 --- a/BaseTools/Source/Python/AutoGen/ModuleAutoGen.py
 +++ b/BaseTools/Source/Python/AutoGen/ModuleAutoGen.py
-@@ -1474,6 +1474,9 @@ class ModuleAutoGen(AutoGen):
+@@ -1429,6 +1429,9 @@ class ModuleAutoGen(AutoGen):
              for File in Files:
                  if File.lower().endswith('.pdb'):
                      AsBuiltInfDict['binary_item'].append('DISPOSABLE|' + File)
@@ -166,7 +160,7 @@ index 65a2176ca9..318b9611ce 100755
          HeaderComments = self.Module.HeaderComments
          StartPos = 0
          for Index in range(len(HeaderComments)):
-@@ -1749,7 +1752,7 @@ class ModuleAutoGen(AutoGen):
+@@ -1704,7 +1707,7 @@ class ModuleAutoGen(AutoGen):
              if os.path.exists (self.TimeStampPath):
                  os.remove (self.TimeStampPath)
  

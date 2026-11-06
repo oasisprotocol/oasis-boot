@@ -3,7 +3,7 @@ DESCRIPTION = "OVMF is an EDK II based project to enable UEFI support for \
 Virtual Machines. OVMF contains sample UEFI firmware for QEMU and KVM"
 HOMEPAGE = "https://github.com/tianocore/tianocore.github.io/wiki/OVMF"
 LICENSE = "BSD-2-Clause-Patent"
-LICENSE:class-target = "${@bb.utils.contains('PACKAGECONFIG', 'secureboot', 'BSD-2-Clause-Patent & OpenSSL', 'BSD-2-Clause-Patent', d)}"
+LICENSE:class-target = "BSD-2-Clause-Patent & Apache-2.0"
 LIC_FILES_CHKSUM = "file://OvmfPkg/License.txt;md5=06357ddc23f46577c2aeaeaf7b776d65"
 
 # Enabling Secure Boot adds a dependency on OpenSSL and implies
@@ -28,8 +28,8 @@ SRC_URI = "gitsm://github.com/tianocore/edk2.git;branch=master;protocol=https \
            file://0004-reproducible.patch \
            "
 
-PV = "edk2-stable202408"
-SRCREV = "b158dad150bf02879668f72ce306445250838201"
+PV = "edk2-stable202608"
+SRCREV = "2970e5699ba6267f3384ffab20f96647578aebc8"
 UPSTREAM_CHECK_GITTAGREGEX = "(?P<pver>edk2-stable.*)"
 
 CVE_PRODUCT = "edk2"
@@ -143,33 +143,6 @@ export GCC_PREFIX_MAP = "${DEBUG_PREFIX_MAP} -Wno-stringop-overflow -Wno-maybe-u
 
 GCC_VER="$(${CC} -v 2>&1 | tail -n1 | awk '{print $3}')"
 
-fixup_target_tools() {
-    case ${1} in
-      4.4.*)
-        FIXED_GCCVER=GCC44
-        ;;
-      4.5.*)
-        FIXED_GCCVER=GCC45
-        ;;
-      4.6.*)
-        FIXED_GCCVER=GCC46
-        ;;
-      4.7.*)
-        FIXED_GCCVER=GCC47
-        ;;
-      4.8.*)
-        FIXED_GCCVER=GCC48
-        ;;
-      4.9.*)
-        FIXED_GCCVER=GCC49
-        ;;
-      *)
-        FIXED_GCCVER=GCC5
-        ;;
-    esac
-    echo ${FIXED_GCCVER}
-}
-
 do_compile:class-native() {
     oe_runmake -C ${S}/BaseTools
 }
@@ -200,7 +173,7 @@ do_compile:class-target() {
     if [ "${TARGET_ARCH}" != "x86_64" ] ; then
         OVMF_DIR_SUFFIX="Ia32" # Note the different capitalization
     fi
-    FIXED_GCCVER=$(fixup_target_tools ${GCC_VER})
+    FIXED_GCCVER=GCC
     bbnote FIXED_GCCVER is ${FIXED_GCCVER}
     build_dir="${S}/Build/Ovmf$OVMF_DIR_SUFFIX/RELEASE_${FIXED_GCCVER}"
 
