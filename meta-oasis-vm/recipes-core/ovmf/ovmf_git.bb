@@ -32,6 +32,7 @@ SRC_URI = "gitsm://github.com/tianocore/edk2.git;branch=master;protocol=https \
            file://0008-fwcfg-bound-hob-size.patch \
            file://0009-tdx-secure-boot-default.patch \
            file://0010-tdx-generic-load-image.patch \
+           file://tdx_profile.py \
            "
 
 PV = "edk2-stable202608"
@@ -242,6 +243,8 @@ FILES:ovmf-shell-efi = " \
 DEPLOYDEP = ""
 DEPLOYDEP:class-target = "qemu-system-native:do_populate_sysroot"
 DEPLOYDEP:class-target += " ${@bb.utils.contains('PACKAGECONFIG', 'secureboot', 'openssl-native:do_populate_sysroot', '', d)}"
+DEPLOYDEP:class-target += " ${@bb.utils.contains('PACKAGECONFIG', 'tdx', 'oasis-tdx-qemu-native:do_populate_sysroot', '', d)}"
+DEPLOYDEP:class-target += " ${@bb.utils.contains('PACKAGECONFIG', 'tdx', 'oasis-tdx-qemu-ubuntu-native:do_populate_sysroot', '', d)}"
 do_deploy[depends] += "${DEPLOYDEP}"
 
 do_deploy() {
@@ -256,6 +259,15 @@ do_deploy:class-target() {
         ; do
         cp ${WORKDIR}/ovmf/$i.fd ${DEPLOYDIR}/$i.fd
     done
+
+    if ${@bb.utils.contains('PACKAGECONFIG', 'tdx', 'true', 'false', d)}; then
+        ${PYTHON_COMMAND} ${WORKDIR}/tdx_profile.py \
+            --qemu-10-1 ${STAGING_BINDIR_NATIVE}/oasis-tdx-qemu \
+            --qemu-8-2 ${STAGING_BINDIR_NATIVE}/oasis-tdx-qemu-ubuntu \
+            --firmware-protocol oasis-tdvf-v1 \
+            --firmware ${DEPLOYDIR}/ovmf.tdx.fd \
+            --output ${DEPLOYDIR}/ovmf.tdx.platform.json.gz
+    fi
 
     if ${@bb.utils.contains('PACKAGECONFIG', 'secureboot', 'true', 'false', d)}; then
         # Create a test Platform Key and first Key Exchange Key to use with EnrollDefaultKeys
