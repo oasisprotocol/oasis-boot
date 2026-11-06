@@ -1,0 +1,89 @@
+From 0a402bd060cd496e2ffb1f323d34b89ca350d7b0 Mon Sep 17 00:00:00 2001
+From: Stanislaw Grams <stanislaw.grams@intel.com>
+Date: Wed, 16 Sep 2026 15:50:17 +0200
+Subject: [PATCH] OvmfPkg/TdxMeasurementLib: Bound event size before
+ BuildGuidHob
+
+TdxMeasurementBuildGuidHob() passes a fixed header size plus the
+caller-supplied EventSize to BuildGuidHob() and then copies EventSize
+bytes into the returned buffer. Where UINTN is 32 bits, that sum can wrap,
+so BuildGuidHob() would allocate the wrapped length while CopyMem() still
+writes EventSize bytes past the end of the HOB.
+
+Compute the payload length with SafeUint32Add() and fail with
+EFI_INVALID_PARAMETER on overflow. BuildGuidHob() enforces the maximum
+GUID HOB payload and returns NULL for oversized requests, which the
+existing NULL check already handles.
+
+Signed-off-by: Stanislaw Grams <stanislaw.grams@intel.com>
+Upstream-Status: Backport [https://github.com/tianocore/edk2/commit/0a402bd060cd496e2ffb1f323d34b89ca350d7b0]
+
+---
+ .../TdxMeasurementLib/SecPeiTdxMeasurement.c  | 22 ++++++++++++++++---
+ .../SecPeiTdxMeasurementLib.inf               |  1 +
+ 2 files changed, 20 insertions(+), 3 deletions(-)
+
+diff --git a/OvmfPkg/IntelTdx/TdxMeasurementLib/SecPeiTdxMeasurement.c b/OvmfPkg/IntelTdx/TdxMeasurementLib/SecPeiTdxMeasurement.c
+index 5de071dd9c..c50734c78b 100644
+--- a/OvmfPkg/IntelTdx/TdxMeasurementLib/SecPeiTdxMeasurement.c
++++ b/OvmfPkg/IntelTdx/TdxMeasurementLib/SecPeiTdxMeasurement.c
+@@ -13,6 +13,7 @@
+ #include <Library/DebugLib.h>
+ #include <Library/HobLib.h>
+ #include <Library/BaseMemoryLib.h>
++#include <Library/SafeIntLib.h>
+ #include <IndustryStandard/Tpm20.h>
+ #include <IndustryStandard/UefiTcgPlatform.h>
+ #include <Library/TdxMeasurementLib.h>
+@@ -49,6 +50,8 @@ TdxMeasurementBuildGuidHob (
+   VOID                *EventHobData;
+   UINT8               *Ptr;
+   TPML_DIGEST_VALUES  *TdxDigest;
++  UINT32              DataLength;
++  RETURN_STATUS       Status;
+ 
+   if (HashSize != SHA384_DIGEST_SIZE) {
+     return EFI_INVALID_PARAMETER;
+@@ -56,11 +59,24 @@ TdxMeasurementBuildGuidHob (
+ 
+   #define TDX_DIGEST_VALUE_LEN  (sizeof (UINT32) + sizeof (TPMI_ALG_HASH) + SHA384_DIGEST_SIZE)
+ 
++  //
++  // EventSize is derived from the measured input and can be attacker-
++  // influenced. Reject a total length that overflows UINT32; BuildGuidHob()
++  // rejects lengths above the maximum GUID HOB payload.
++  //
++  Status = SafeUint32Add (
++             (UINT32)(sizeof (TCG_PCRINDEX) + sizeof (TCG_EVENTTYPE) +
++                      TDX_DIGEST_VALUE_LEN + sizeof (UINT32)),
++             EventSize,
++             &DataLength
++             );
++  if (RETURN_ERROR (Status)) {
++    return EFI_INVALID_PARAMETER;
++  }
++
+   EventHobData = BuildGuidHob (
+                    &gCcEventEntryHobGuid,
+-                   sizeof (TCG_PCRINDEX) + sizeof (TCG_EVENTTYPE) +
+-                   TDX_DIGEST_VALUE_LEN +
+-                   sizeof (UINT32) + EventSize
++                   DataLength
+                    );
+ 
+   if (EventHobData == NULL) {
+diff --git a/OvmfPkg/IntelTdx/TdxMeasurementLib/SecPeiTdxMeasurementLib.inf b/OvmfPkg/IntelTdx/TdxMeasurementLib/SecPeiTdxMeasurementLib.inf
+index 6750b8d15e..8add9da1d0 100644
+--- a/OvmfPkg/IntelTdx/TdxMeasurementLib/SecPeiTdxMeasurementLib.inf
++++ b/OvmfPkg/IntelTdx/TdxMeasurementLib/SecPeiTdxMeasurementLib.inf
+@@ -39,6 +39,7 @@
+   DebugLib
+   HobLib
+   PcdLib
++  SafeIntLib
+   TdxLib
+ 
+ [Guids]
+-- 
+2.51.1
+

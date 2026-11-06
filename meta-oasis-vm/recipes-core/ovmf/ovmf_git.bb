@@ -8,7 +8,7 @@ LIC_FILES_CHKSUM = "file://OvmfPkg/License.txt;md5=06357ddc23f46577c2aeaeaf7b776
 
 # Enabling Secure Boot adds a dependency on OpenSSL and implies
 # compiling OVMF twice, so it is disabled by default. Distros
-# may change that default.
+# may change that default. IntelTdx separately enables Secure Boot explicitly.
 PACKAGECONFIG ??= ""
 PACKAGECONFIG += "${@bb.utils.contains('MACHINE_FEATURES', 'tpm', 'tpm', '', d)}"
 PACKAGECONFIG += "${@bb.utils.contains('MACHINE_FEATURES', 'tpm2', 'tpm', '', d)}"
@@ -26,6 +26,12 @@ SRC_URI = "gitsm://github.com/tianocore/edk2.git;branch=master;protocol=https \
            file://0002-BaseTools-makefile-adjust-to-build-in-under-bitbake.patch \
            file://0003-debug-prefix-map.patch \
            file://0004-reproducible.patch \
+           file://0005-pei-bound-guid-hob-size.patch \
+           file://0006-prepi-bound-guid-hob-size.patch \
+           file://0007-tdx-bound-event-size.patch \
+           file://0008-fwcfg-bound-hob-size.patch \
+           file://0009-tdx-secure-boot-default.patch \
+           file://0010-tdx-generic-load-image.patch \
            "
 
 PV = "edk2-stable202608"
@@ -200,7 +206,7 @@ do_compile:class-target() {
         bbnote "Building with TDX support."
         build_dir="${S}/Build/IntelTdx/RELEASE_${FIXED_GCCVER}"
         rm -rf ${S}/Build/IntelTdx
-        ${S}/OvmfPkg/build.sh $PARALLEL_JOBS -a $OVMF_ARCH -b RELEASE -t ${FIXED_GCCVER} -p OvmfPkg/IntelTdx/IntelTdxX64.dsc
+        ${S}/OvmfPkg/build.sh $PARALLEL_JOBS -a $OVMF_ARCH -b RELEASE -t ${FIXED_GCCVER} -p OvmfPkg/IntelTdx/IntelTdxX64.dsc -D SECURE_BOOT_ENABLE=TRUE -D BUILD_SHELL=FALSE
         ln ${build_dir}/FV/OVMF.fd ${WORKDIR}/ovmf/ovmf.tdx.fd
         ln ${build_dir}/FV/OVMF_CODE.fd ${WORKDIR}/ovmf/ovmf.tdx.code.fd
     fi

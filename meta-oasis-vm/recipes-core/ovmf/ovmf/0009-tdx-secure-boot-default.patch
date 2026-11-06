@@ -1,0 +1,46 @@
+From ca211e68cc58bee8490dfde0b84a103f2804501d Mon Sep 17 00:00:00 2001
+From: Stanislaw Grams <stanislaw.grams@intel.com>
+Date: Wed, 16 Sep 2026 15:55:43 +0200
+Subject: [PATCH] OvmfPkg/IntelTdx: Enable Secure Boot and drop the shell by
+ default
+
+The Config-B TDX firmware shipped with SECURE_BOOT_ENABLE=FALSE and
+BUILD_SHELL=TRUE by default, so a default production build performed no
+Secure Boot image verification and embedded the full UEFI Shell, giving an
+attacker an unauthenticated command environment.
+
+Default SECURE_BOOT_ENABLE to TRUE and BUILD_SHELL to FALSE, matching the
+hardened AmdSevX64 posture. Both remain overridable on the build command
+line (-D FLAG=VALUE) for development. With Secure Boot enabled the shell FV
+is already excluded by ShellDxe.fdf.inc.
+
+Signed-off-by: Stanislaw Grams <stanislaw.grams@intel.com>
+Upstream-Status: Backport [https://github.com/tianocore/edk2/commit/ca211e68cc58bee8490dfde0b84a103f2804501d]
+
+---
+ OvmfPkg/IntelTdx/IntelTdxX64.dsc | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/OvmfPkg/IntelTdx/IntelTdxX64.dsc b/OvmfPkg/IntelTdx/IntelTdxX64.dsc
+index 69c42a9f5c..4f63a12640 100644
+--- a/OvmfPkg/IntelTdx/IntelTdxX64.dsc
++++ b/OvmfPkg/IntelTdx/IntelTdxX64.dsc
+@@ -29,13 +29,13 @@
+   # Defines for default states.  These can be changed on the command line.
+   # -D FLAG=VALUE
+   #
+-  DEFINE SECURE_BOOT_ENABLE      = FALSE
++  DEFINE SECURE_BOOT_ENABLE      = TRUE
+   DEFINE DEBUG_TO_MEM            = FALSE
+ 
+   #
+   # Shell can be useful for debugging but should not be enabled for production
+   #
+-  DEFINE BUILD_SHELL             = TRUE
++  DEFINE BUILD_SHELL             = FALSE
+ 
+   #
+   # Device drivers
+-- 
+2.51.1
+
