@@ -1,0 +1,74 @@
+From 38c33ed0b98f5dc4c376b2d87fac84ab2c1854be Mon Sep 17 00:00:00 2001
+From: Stanislaw Grams <stanislaw.grams@intel.com>
+Date: Fri, 9 Oct 2026 13:38:00 +0200
+Subject: [PATCH] MdePkg/PeiHobLib: Reject oversized GUID HOB payloads
+
+Enforce the maximum aligned GUID HOB payload at runtime before adding
+the header size and narrowing the allocation length to UINT16. The
+existing assertion alone does not protect builds with assertions disabled.
+
+Return NULL for oversized requests and document the failure result for
+BuildGuidHob() and BuildGuidDataHob(). Retain the debug assertion.
+
+Signed-off-by: Stanislaw Grams <stanislaw.grams@intel.com>
+Upstream-Status: Backport [https://github.com/tianocore/edk2/commit/38c33ed0b98f5dc4c376b2d87fac84ab2c1854be]
+
+---
+ MdePkg/Include/Library/HobLib.h   | 4 ++--
+ MdePkg/Library/PeiHobLib/HobLib.c | 7 +++++--
+ 2 files changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/MdePkg/Include/Library/HobLib.h b/MdePkg/Include/Library/HobLib.h
+index c83cde0d..1faf8dfe 100644
+--- a/MdePkg/Include/Library/HobLib.h
++++ b/MdePkg/Include/Library/HobLib.h
+@@ -245,7 +245,7 @@ BuildResourceDescriptorHob (
+   @param  Guid          The GUID to tag the customized HOB.
+   @param  DataLength    The size of the data payload for the GUID HOB.
+ 
+-  @retval  NULL         The GUID HOB could not be allocated.
++  @retval  NULL         DataLength is too large or the GUID HOB could not be allocated.
+   @retval  others       The start address of GUID HOB data.
+ 
+ **/
+@@ -277,7 +277,7 @@ BuildGuidHob (
+   @param  Data          The data to be copied into the data field of the GUID HOB.
+   @param  DataLength    The size of the data payload for the GUID HOB.
+ 
+-  @retval  NULL         The GUID HOB could not be allocated.
++  @retval  NULL         DataLength is too large or the GUID HOB could not be allocated.
+   @retval  others       The start address of GUID HOB data.
+ 
+ **/
+diff --git a/MdePkg/Library/PeiHobLib/HobLib.c b/MdePkg/Library/PeiHobLib/HobLib.c
+index 4f53ad64..438aa7c8 100644
+--- a/MdePkg/Library/PeiHobLib/HobLib.c
++++ b/MdePkg/Library/PeiHobLib/HobLib.c
+@@ -398,7 +398,7 @@ BuildResourceDescriptorHob (
+   @param  Guid          The GUID to tag the customized HOB.
+   @param  DataLength    The size of the data payload for the GUID HOB.
+ 
+-  @retval  NULL         The GUID HOB could not be allocated.
++  @retval  NULL         DataLength is too large or the GUID HOB could not be allocated.
+   @retval  others       The start address of GUID HOB data.
+ 
+ **/
+@@ -420,6 +420,9 @@ BuildGuidHob (
+   // Make sure that data length is not too long.
+   //
+   ASSERT (DataLength <= (0xFFF8 - sizeof (EFI_HOB_GUID_TYPE)));
++  if (DataLength > (0xFFF8 - sizeof (EFI_HOB_GUID_TYPE))) {
++    return NULL;
++  }
+ 
+   Hob = InternalPeiCreateHob (EFI_HOB_TYPE_GUID_EXTENSION, (UINT16)(sizeof (EFI_HOB_GUID_TYPE) + DataLength));
+   if (Hob == NULL) {
+@@ -451,7 +454,7 @@ BuildGuidHob (
+   @param  Data          The data to be copied into the data field of the GUID HOB.
+   @param  DataLength    The size of the data payload for the GUID HOB.
+ 
+-  @retval  NULL         The GUID HOB could not be allocated.
++  @retval  NULL         DataLength is too large or the GUID HOB could not be allocated.
+   @retval  others       The start address of GUID HOB data.
+ 
+ **/

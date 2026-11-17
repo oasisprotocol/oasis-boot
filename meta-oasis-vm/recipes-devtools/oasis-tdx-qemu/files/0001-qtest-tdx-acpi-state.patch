@@ -1,0 +1,31 @@
+Subject: [PATCH] q35: reproduce Ubuntu TDX ACPI state in the private qtest tool
+
+Ubuntu's tdx_kvm_init sets eoi_intercept_unsupported before building ACPI.
+The offline exporter cannot call KVM. Reproduce that assignment only under
+qtest, without changing the table builders or any guest-execution path.
+This patch is exclusive to the native release tool, never the deployed QEMU.
+
+Upstream-Status: Inappropriate [Oasis offline release tool]
+
+--- a/hw/i386/pc_q35.c
++++ b/hw/i386/pc_q35.c
+@@ -36,6 +36,7 @@
+ #include "hw/rtc/mc146818rtc.h"
+ #include "sysemu/tcg.h"
+ #include "sysemu/kvm.h"
++#include "sysemu/qtest.h"
+ #include "hw/i386/kvm/clock.h"
+ #include "hw/pci-host/q35.h"
+ #include "hw/pci/pcie_port.h"
+@@ -143,6 +144,11 @@
+     bool keep_pci_slot_hpc;
+     uint64_t pci_hole64_size = 0;
+ 
++    /* Mirror tdx_kvm_init's ACPI input without creating a TD. */
++    if (qtest_enabled()) {
++        x86ms->eoi_intercept_unsupported = true;
++    }
++
+     /* Check whether RAM fits below 4G (leaving 1/2 GByte for IO memory
+      * and 256 Mbytes for PCI Express Enhanced Configuration Access Mapping
+      * also known as MMCFG).

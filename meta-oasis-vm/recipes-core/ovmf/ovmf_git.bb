@@ -3,12 +3,12 @@ DESCRIPTION = "OVMF is an EDK II based project to enable UEFI support for \
 Virtual Machines. OVMF contains sample UEFI firmware for QEMU and KVM"
 HOMEPAGE = "https://github.com/tianocore/tianocore.github.io/wiki/OVMF"
 LICENSE = "BSD-2-Clause-Patent"
-LICENSE:class-target = "${@bb.utils.contains('PACKAGECONFIG', 'secureboot', 'BSD-2-Clause-Patent & OpenSSL', 'BSD-2-Clause-Patent', d)}"
+LICENSE:class-target = "BSD-2-Clause-Patent & Apache-2.0"
 LIC_FILES_CHKSUM = "file://OvmfPkg/License.txt;md5=06357ddc23f46577c2aeaeaf7b776d65"
 
 # Enabling Secure Boot adds a dependency on OpenSSL and implies
 # compiling OVMF twice, so it is disabled by default. Distros
-# may change that default.
+# may change that default. IntelTdx separately enables Secure Boot explicitly.
 PACKAGECONFIG ??= ""
 PACKAGECONFIG += "${@bb.utils.contains('MACHINE_FEATURES', 'tpm', 'tpm', '', d)}"
 PACKAGECONFIG += "${@bb.utils.contains('MACHINE_FEATURES', 'tpm2', 'tpm', '', d)}"
@@ -26,10 +26,17 @@ SRC_URI = "gitsm://github.com/tianocore/edk2.git;branch=master;protocol=https \
            file://0002-BaseTools-makefile-adjust-to-build-in-under-bitbake.patch \
            file://0003-debug-prefix-map.patch \
            file://0004-reproducible.patch \
+           file://0005-pei-bound-guid-hob-size.patch \
+           file://0006-prepi-bound-guid-hob-size.patch \
+           file://0007-tdx-bound-event-size.patch \
+           file://0008-fwcfg-bound-hob-size.patch \
+           file://0009-tdx-secure-boot-default.patch \
+           file://0010-tdx-generic-load-image.patch \
+           file://tdx_profile.py \
            "
 
-PV = "edk2-stable202408"
-SRCREV = "b158dad150bf02879668f72ce306445250838201"
+PV = "edk2-stable202608"
+SRCREV = "2970e5699ba6267f3384ffab20f96647578aebc8"
 UPSTREAM_CHECK_GITTAGREGEX = "(?P<pver>edk2-stable.*)"
 
 CVE_PRODUCT = "edk2"
@@ -143,33 +150,6 @@ export GCC_PREFIX_MAP = "${DEBUG_PREFIX_MAP} -Wno-stringop-overflow -Wno-maybe-u
 
 GCC_VER="$(${CC} -v 2>&1 | tail -n1 | awk '{print $3}')"
 
-fixup_target_tools() {
-    case ${1} in
-      4.4.*)
-        FIXED_GCCVER=GCC44
-        ;;
-      4.5.*)
-        FIXED_GCCVER=GCC45
-        ;;
-      4.6.*)
-        FIXED_GCCVER=GCC46
-        ;;
-      4.7.*)
-        FIXED_GCCVER=GCC47
-        ;;
-      4.8.*)
-        FIXED_GCCVER=GCC48
-        ;;
-      4.9.*)
-        FIXED_GCCVER=GCC49
-        ;;
-      *)
-        FIXED_GCCVER=GCC5
-        ;;
-    esac
-    echo ${FIXED_GCCVER}
-}
-
 do_compile:class-native() {
     oe_runmake -C ${S}/BaseTools
 }
@@ -200,7 +180,7 @@ do_compile:class-target() {
     if [ "${TARGET_ARCH}" != "x86_64" ] ; then
         OVMF_DIR_SUFFIX="Ia32" # Note the different capitalization
     fi
-    FIXED_GCCVER=$(fixup_target_tools ${GCC_VER})
+    FIXED_GCCVER=GCC
     bbnote FIXED_GCCVER is ${FIXED_GCCVER}
     build_dir="${S}/Build/Ovmf$OVMF_DIR_SUFFIX/RELEASE_${FIXED_GCCVER}"
 
@@ -227,7 +207,7 @@ do_compile:class-target() {
         bbnote "Building with TDX support."
         build_dir="${S}/Build/IntelTdx/RELEASE_${FIXED_GCCVER}"
         rm -rf ${S}/Build/IntelTdx
-        ${S}/OvmfPkg/build.sh $PARALLEL_JOBS -a $OVMF_ARCH -b RELEASE -t ${FIXED_GCCVER} -p OvmfPkg/IntelTdx/IntelTdxX64.dsc
+        ${S}/OvmfPkg/build.sh $PARALLEL_JOBS -a $OVMF_ARCH -b RELEASE -t ${FIXED_GCCVER} -p OvmfPkg/IntelTdx/IntelTdxX64.dsc -D SECURE_BOOT_ENABLE=TRUE -D BUILD_SHELL=FALSE
         ln ${build_dir}/FV/OVMF.fd ${WORKDIR}/ovmf/ovmf.tdx.fd
         ln ${build_dir}/FV/OVMF_CODE.fd ${WORKDIR}/ovmf/ovmf.tdx.code.fd
     fi
@@ -263,6 +243,8 @@ FILES:ovmf-shell-efi = " \
 DEPLOYDEP = ""
 DEPLOYDEP:class-target = "qemu-system-native:do_populate_sysroot"
 DEPLOYDEP:class-target += " ${@bb.utils.contains('PACKAGECONFIG', 'secureboot', 'openssl-native:do_populate_sysroot', '', d)}"
+DEPLOYDEP:class-target += " ${@bb.utils.contains('PACKAGECONFIG', 'tdx', 'oasis-tdx-qemu-native:do_populate_sysroot', '', d)}"
+DEPLOYDEP:class-target += " ${@bb.utils.contains('PACKAGECONFIG', 'tdx', 'oasis-tdx-qemu-ubuntu-native:do_populate_sysroot', '', d)}"
 do_deploy[depends] += "${DEPLOYDEP}"
 
 do_deploy() {
@@ -277,6 +259,15 @@ do_deploy:class-target() {
         ; do
         cp ${WORKDIR}/ovmf/$i.fd ${DEPLOYDIR}/$i.fd
     done
+
+    if ${@bb.utils.contains('PACKAGECONFIG', 'tdx', 'true', 'false', d)}; then
+        ${PYTHON_COMMAND} ${WORKDIR}/tdx_profile.py \
+            --qemu-10-1 ${STAGING_BINDIR_NATIVE}/oasis-tdx-qemu \
+            --qemu-8-2 ${STAGING_BINDIR_NATIVE}/oasis-tdx-qemu-ubuntu \
+            --firmware-protocol oasis-tdvf-v1 \
+            --firmware ${DEPLOYDIR}/ovmf.tdx.fd \
+            --output ${DEPLOYDIR}/ovmf.tdx.platform.json.gz
+    fi
 
     if ${@bb.utils.contains('PACKAGECONFIG', 'secureboot', 'true', 'false', d)}; then
         # Create a test Platform Key and first Key Exchange Key to use with EnrollDefaultKeys

@@ -1,0 +1,70 @@
+From 0b14d8c58c8379d25fde73e2a64dd16c5d1c7062 Mon Sep 17 00:00:00 2001
+From: Stanislaw Grams <stanislaw.grams@intel.com>
+Date: Fri, 9 Oct 2026 13:38:00 +0200
+Subject: [PATCH] EmbeddedPkg/PrePiHobLib: Reject oversized GUID HOB payloads
+
+Check the GUID HOB payload length before the UINT16 allocation cast.
+Use the aligned maximum total HOB length of 0xFFF8 instead of 0xFFFF
+in both the assertion and runtime guard.
+
+Return NULL for oversized requests when assertions are disabled or
+return, and document the allocation and copy-wrapper failure behavior.
+
+Signed-off-by: Stanislaw Grams <stanislaw.grams@intel.com>
+Upstream-Status: Backport [https://github.com/tianocore/edk2/commit/0b14d8c58c8379d25fde73e2a64dd16c5d1c7062]
+
+---
+ EmbeddedPkg/Library/PrePiHobLib/Hob.c | 17 ++++++++++++-----
+ 1 file changed, 12 insertions(+), 5 deletions(-)
+
+diff --git a/EmbeddedPkg/Library/PrePiHobLib/Hob.c b/EmbeddedPkg/Library/PrePiHobLib/Hob.c
+index 28ffc435..cfedebcc 100644
+--- a/EmbeddedPkg/Library/PrePiHobLib/Hob.c
++++ b/EmbeddedPkg/Library/PrePiHobLib/Hob.c
+@@ -433,12 +433,14 @@ BuildModuleHob (
+   for DXE phase, it will ASSERT() since PEI HOB is read-only for DXE phase.
+   If Guid is NULL, then ASSERT().
+   If there is no additional space for HOB creation, then ASSERT().
+-  If DataLength >= (0x10000 - sizeof (EFI_HOB_GUID_TYPE)), then ASSERT().
++  If DataLength > (0xFFF8 - sizeof (EFI_HOB_GUID_TYPE)), then ASSERT().
++  HobLength is UINT16 and multiples of 8 bytes, so the max HobLength is 0xFFF8.
+ 
+   @param  Guid          The GUID to tag the customized HOB.
+   @param  DataLength    The size of the data payload for the GUID HOB.
+ 
+-  @return The start address of GUID HOB data.
++  @retval  NULL         DataLength is too large or the GUID HOB could not be allocated.
++  @retval  others       The start address of GUID HOB data.
+ 
+ **/
+ VOID *
+@@ -453,7 +455,10 @@ BuildGuidHob (
+   //
+   // Make sure that data length is not too long.
+   //
+-  ASSERT (DataLength <= (0xffff - sizeof (EFI_HOB_GUID_TYPE)));
++  ASSERT (DataLength <= (0xFFF8 - sizeof (EFI_HOB_GUID_TYPE)));
++  if (DataLength > (0xFFF8 - sizeof (EFI_HOB_GUID_TYPE))) {
++    return NULL;
++  }
+ 
+   Hob = CreateHob (EFI_HOB_TYPE_GUID_EXTENSION, (UINT16)(sizeof (EFI_HOB_GUID_TYPE) + DataLength));
+   ASSERT (Hob != NULL);
+@@ -476,13 +481,15 @@ BuildGuidHob (
+   If Guid is NULL, then ASSERT().
+   If Data is NULL and DataLength > 0, then ASSERT().
+   If there is no additional space for HOB creation, then ASSERT().
+-  If DataLength >= (0x10000 - sizeof (EFI_HOB_GUID_TYPE)), then ASSERT().
++  If DataLength > (0xFFF8 - sizeof (EFI_HOB_GUID_TYPE)), then ASSERT().
++  HobLength is UINT16 and multiples of 8 bytes, so the max HobLength is 0xFFF8.
+ 
+   @param  Guid          The GUID to tag the customized HOB.
+   @param  Data          The data to be copied into the data field of the GUID HOB.
+   @param  DataLength    The size of the data payload for the GUID HOB.
+ 
+-  @return The start address of GUID HOB data.
++  @retval  NULL         DataLength is too large or the GUID HOB could not be allocated.
++  @retval  others       The start address of GUID HOB data.
+ 
+ **/
+ VOID *

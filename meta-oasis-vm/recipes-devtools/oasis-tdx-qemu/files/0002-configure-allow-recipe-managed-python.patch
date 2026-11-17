@@ -1,0 +1,40 @@
+From: Oasis <info@oasis.net>
+Subject: [PATCH] configure: allow recipe-managed Python and Meson
+
+Yocto's native Python sysconfig uses the staged prefix even inside a venv.
+QEMU therefore mistakes staged packages for venv-local packages and tries
+to reinstall them with pip. Ubuntu's repacked source has no fallback wheels.
+
+Let these private native recipes supply Python and Meson directly, following
+OE-Core's fixedmeson/no-pip approach while retaining the selected interpreter.
+The 8.2 recipe uses meson-native; 10.1 extracts its bundled wheels locally.
+Fail any later request to install optional Python dependencies in this mode.
+The normal upstream bootstrap remains available outside the recipes.
+
+Upstream-Status: Inappropriate [OE-specific native build integration]
+
+diff --git a/configure b/configure
+--- a/configure
++++ b/configure
+@@ -938,6 +938,13 @@
+ echo "python determined to be '$python'"
+ echo "python version: $($python --version)"
+ 
++# Private native recipes provide all build-time Python dependencies offline.
++if test -n "$OASIS_MESON"; then
++    python="$python -B"
++    mkvenv=false
++    meson="$OASIS_MESON"
++else
++
+ python="$($python -B "${source_path}/python/scripts/mkvenv.py" create pyvenv)"
+ if test "$?" -ne 0 ; then
+     error_exit "python venv creation failed"
+@@ -961,6 +968,7 @@
+ # *exclusively*.
+ 
+ meson="$(cd pyvenv/bin; pwd)/meson"
++fi
+ 
+ # Conditionally ensure Sphinx is installed.
+ 

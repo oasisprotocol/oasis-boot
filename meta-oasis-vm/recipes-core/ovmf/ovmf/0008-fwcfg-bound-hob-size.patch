@@ -1,0 +1,100 @@
+From 6951a9edbb32a5b77b80781a0a3f0edee1205541 Mon Sep 17 00:00:00 2001
+From: Stanislaw Grams <stanislaw.grams@intel.com>
+Date: Wed, 30 Sep 2026 11:25:21 +0200
+Subject: [PATCH] OvmfPkg/QemuFwCfgLib: Bound fw_cfg size before BuildGuidHob
+
+CacheFwCfgInfoWithOptionalMeasurment() derives the cached-item HOB
+size from a VMM-controlled fw_cfg file and stores it in a UINT32. An
+oversized item could wrap that size, so BuildGuidHob() would allocate the
+wrapped length while QemuFwCfgReadBytes() copies the full file into it.
+
+Compute the HOB size with SafeUint32Add() and fail with
+EFI_INVALID_PARAMETER on overflow. BuildGuidHob() enforces the maximum
+GUID HOB payload and returns NULL for oversized requests, which the
+existing NULL check already handles.
+
+Signed-off-by: Stanislaw Grams <stanislaw.grams@intel.com>
+Upstream-Status: Backport [https://github.com/tianocore/edk2/commit/6951a9edbb32a5b77b80781a0a3f0edee1205541]
+
+---
+ .../Library/QemuFwCfgLib/QemuFwCfgCacheInit.c | 20 +++++++++++++++++--
+ .../Library/QemuFwCfgLib/QemuFwCfgPeiLib.inf  |  1 +
+ .../Library/QemuFwCfgLib/QemuFwCfgSecLib.inf  |  1 +
+ 3 files changed, 20 insertions(+), 2 deletions(-)
+
+diff --git a/OvmfPkg/Library/QemuFwCfgLib/QemuFwCfgCacheInit.c b/OvmfPkg/Library/QemuFwCfgLib/QemuFwCfgCacheInit.c
+index d3220c8f..237e3ee0 100644
+--- a/OvmfPkg/Library/QemuFwCfgLib/QemuFwCfgCacheInit.c
++++ b/OvmfPkg/Library/QemuFwCfgLib/QemuFwCfgCacheInit.c
+@@ -9,6 +9,7 @@
+ #include <Library/BaseMemoryLib.h>
+ #include <Library/DebugLib.h>
+ #include <Library/QemuFwCfgLib.h>
++#include <Library/SafeIntLib.h>
+ #include "QemuFwCfgLibInternal.h"
+ #include <Library/TdxHelperLib.h>
+ #include <Library/PrintLib.h>
+@@ -169,6 +170,7 @@ CacheFwCfgInfoWithOptionalMeasurment (
+   FW_CFG_CACHED_ITEM  *CachedItem;
+   UINT8               *ItemData;
+   UINT32              FwCfgItemHobSize;
++  EFI_STATUS          Status;
+ 
+   Count = CACHE_FW_CFG_COUNT;
+ 
+@@ -178,7 +180,22 @@ CacheFwCfgInfoWithOptionalMeasurment (
+     }
+ 
+     FwCfginfoHobData = NULL;
+-    FwCfgItemHobSize = sizeof (FW_CFG_CACHED_ITEM) + CacheFwCfgList[Index].FwCfgSize;
++
++    //
++    // FwCfgSize originates from the untrusted VMM fw_cfg interface. Reject a
++    // total length that overflows UINT32; BuildGuidHob() rejects lengths above
++    // the maximum GUID HOB payload.
++    //
++    Status = SafeUint32Add (
++               (UINT32)sizeof (FW_CFG_CACHED_ITEM),
++               CacheFwCfgList[Index].FwCfgSize,
++               &FwCfgItemHobSize
++               );
++    if (RETURN_ERROR (Status)) {
++      DEBUG ((DEBUG_ERROR, "%a: FwCfgSize(0x%x) too large\n", __func__, CacheFwCfgList[Index].FwCfgSize));
++      return EFI_INVALID_PARAMETER;
++    }
++
+     FwCfginfoHobData = BuildGuidHob (&gOvmfFwCfgInfoHobGuid, FwCfgItemHobSize);
+     if (FwCfginfoHobData == NULL) {
+       DEBUG ((DEBUG_ERROR, "%a: BuildGuidHob Failed with FwCfgItemHobSize(0x%x)\n", __func__, FwCfgItemHobSize));
+@@ -208,7 +225,6 @@ CacheFwCfgInfoWithOptionalMeasurment (
+ 
+     if (TdIsEnabled ()) {
+       FW_CFG_EVENT  FwCfgEvent;
+-      EFI_STATUS    Status;
+ 
+       ZeroMem (&FwCfgEvent, sizeof (FW_CFG_EVENT));
+       CopyMem (&FwCfgEvent.FwCfg, EV_POSTCODE_INFO_QEMU_FW_CFG_DATA, sizeof (EV_POSTCODE_INFO_QEMU_FW_CFG_DATA));
+diff --git a/OvmfPkg/Library/QemuFwCfgLib/QemuFwCfgPeiLib.inf b/OvmfPkg/Library/QemuFwCfgLib/QemuFwCfgPeiLib.inf
+index 7ecfa489..927ce3ca 100644
+--- a/OvmfPkg/Library/QemuFwCfgLib/QemuFwCfgPeiLib.inf
++++ b/OvmfPkg/Library/QemuFwCfgLib/QemuFwCfgPeiLib.inf
+@@ -46,6 +46,7 @@
+   HobLib
+   IoLib
+   MemoryAllocationLib
++  SafeIntLib
+   TpmMeasurementLib
+ 
+ [Guids]
+diff --git a/OvmfPkg/Library/QemuFwCfgLib/QemuFwCfgSecLib.inf b/OvmfPkg/Library/QemuFwCfgLib/QemuFwCfgSecLib.inf
+index 587fe3e1..6561185a 100644
+--- a/OvmfPkg/Library/QemuFwCfgLib/QemuFwCfgSecLib.inf
++++ b/OvmfPkg/Library/QemuFwCfgLib/QemuFwCfgSecLib.inf
+@@ -44,6 +44,7 @@
+   IoLib
+   MemoryAllocationLib
+   HobLib
++  SafeIntLib
+   TpmMeasurementLib
+ 
+ [Guids]
